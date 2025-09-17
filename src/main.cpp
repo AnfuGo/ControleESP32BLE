@@ -6,6 +6,7 @@
 #include <BLE2902.h> // desnecessário
 #include <OneWire.h> // sensor
 #include <DallasTemperature.h> //sensor
+#include <cctype> // isdigit
 
 // UUID-bluetooth-----128bits gerados através do gerador online de UUID.
 const char* CIA_CONTROL_ENABLE = "22086d8b-57c2-4eb4-b82d-4b7936413e78";
@@ -81,14 +82,27 @@ class enableControl : public BLECharacteristicCallbacks {
 public:
   enableControl(bool &control) : controle(control) {}
   void onWrite(BLECharacteristic* ENABLE_CONTROL) override {
-    std::string value = ENABLE_CONTROL->getValue();
-    bool enable_control = (value == "1");
-    controle = enable_control;
+    const std::string value = ENABLE_CONTROL->getValue();
 
-    if (enable_control) {
-      Serial.println("Controle habilitado");
+    if (!value.empty()) {
+      // Se o app enviar bytes: [0] ou [1] -> pega o primeiro byte
+      uint8_t b = static_cast<uint8_t>(value[0]);
+
+      // Se é um dígito ASCII '0' ou '1', trate como ASCII também
+      if ((b == '0') || (b == '1')) {
+        controle = (b == '1');
+      } else {
+        // tratado como byte numérico (0 -> desligado, !=0 -> ligado)
+        controle = (b != 0);
+      }
+
+      Serial.print("enableControl onWrite - raw first byte: ");
+      Serial.println(b);
+      Serial.print("controle set to: ");
+      Serial.println(controle ? "1" : "0");
     } else {
-      Serial.println("Controle desabilitado");
+      // fallback: se veio vazio, tenta interpretar string (incomum)
+      Serial.println("enableControl onWrite - valor vazio recebido");
     }
   }
 };
@@ -98,14 +112,45 @@ class functionsControl : public BLECharacteristicCallbacks {
 public:
   functionsControl(int &st) : set_point(st) {}
   void onWrite(BLECharacteristic* variaveisBLE) override {
-    std::string value = variaveisBLE->getValue();
-    set_point = atoi(value.c_str());
-    Serial.println(value.c_str());
+    const std::string value = variaveisBLE->getValue();
+
+    if (!value.empty()) {
+      // Verifica se o valor recebido é ASCII imprimível contendo dígitos (ex: "25")
+      bool allAsciiDigits = true;
+      for (char c : value) {
+        if (!(std::isdigit((unsigned char)c) || c == '-' || c == '+')) {
+          allAsciiDigits = false;
+          break;
+        }
+      }
+
+      if (allAsciiDigits) {
+        // Se for uma string ASCII de dígitos, usa atoi (ex: "25")
+        int parsed = atoi(value.c_str());
+        set_point = parsed;
+        Serial.print("functionsControl onWrite - ASCII parsed: ");
+        Serial.println(parsed);
+      } else {
+        // Caso contrário, interpreta o primeiro byte como valor numérico (0-255)
+        uint8_t b = static_cast<uint8_t>(value[0]);
+        set_point = b;
+        Serial.print("functionsControl onWrite - byte value: ");
+        Serial.println(b);
+      }
+
+      Serial.print("Novo setpoint: ");
+      Serial.println(set_point);
+    } else {
+      Serial.println("functionsControl onWrite - valor vazio recebido");
+    }
   }
   void onRead(BLECharacteristic* variaveisBLE) override {
-    std::string value = variaveisBLE->getValue();
-    Serial.print("Valor lido: ");
-    Serial.println(value.c_str());
+    // Ao ler, escrevemos a representação atual do set_point.
+    // Podemos enviar em ASCII (ex: "25") para facilitar debug no lado do app
+    std::string out = std::to_string(set_point);
+    variaveisBLE->setValue(out);
+    Serial.print("functionsControl onRead - enviando setpoint: ");
+    Serial.println(out.c_str());
   }
 };
 
