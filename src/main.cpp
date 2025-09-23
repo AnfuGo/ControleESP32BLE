@@ -165,6 +165,7 @@ void setup() {
     sensors[i].begin();
     sensors[i].setResolution(12);
   }
+  Serial.println("Servidor Criado");
   BLEService *controlTemp[2];
   for (int i = 0; i < 2; i++) {
     controlTemp[i] = servidorCIA->createService(SERVICE_UUID[i]);
@@ -186,7 +187,7 @@ void setup() {
       l++;
     }
   }
-
+  Serial.println("Características criadas");
   for (int i = 0; i < 2; i++) {
     controlTemp[i]->start();
   }
@@ -200,6 +201,8 @@ void setup() {
 
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->start();
+
+  Serial.println("Anunciando serviço");
 
   for (int i = 0; i < 3; i++) {
     ledcSetup(pwmChannel[i], pwmFreq, pwmResolution);
@@ -226,8 +229,14 @@ void loop() {
   for (int i = 0; i < 3; i++) {
     if (controleAtivo[i] && (agora - ultimoTempo[i] >= intervalo)) {
       ultimoTempo[i] = agora;
+      Serial.print("Tempo antes do request: ");
+      Serial.println(millis());
       sensors[i].requestTemperatures();
+      Serial.print("Tempo após o request e antes do index: ");
+      Serial.println(millis());
       medida = sensors[i].getTempCByIndex(0);
+      Serial.print("Tempo após o index: ");
+      Serial.println(millis());
       temperatura[i] = medida; 
 
       errk[i] = setpoint[i] - temperatura[i];
