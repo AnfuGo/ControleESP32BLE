@@ -109,13 +109,14 @@ public:
 
 class functionsControl : public BLECharacteristicCallbacks {
   int &set_point;
+  int sensorIndex; // índice do sensor correspondente
 public:
-  functionsControl(int &st) : set_point(st) {}
+  functionsControl(int &st, int idx) : set_point(st), sensorIndex(idx) {}
+
   void onWrite(BLECharacteristic* variaveisBLE) override {
     const std::string value = variaveisBLE->getValue();
 
     if (!value.empty()) {
-      // Verifica se o valor recebido é ASCII imprimível contendo dígitos (ex: "25")
       bool allAsciiDigits = true;
       for (char c : value) {
         if (!(std::isdigit((unsigned char)c) || c == '-' || c == '+')) {
@@ -125,13 +126,11 @@ public:
       }
 
       if (allAsciiDigits) {
-        // Se for uma string ASCII de dígitos, usa atoi (ex: "25")
         int parsed = atoi(value.c_str());
         set_point = parsed;
         Serial.print("functionsControl onWrite - ASCII parsed: ");
         Serial.println(parsed);
       } else {
-        // Caso contrário, interpreta o primeiro byte como valor numérico (0-255)
         uint8_t b = static_cast<uint8_t>(value[0]);
         set_point = b;
         Serial.print("functionsControl onWrite - byte value: ");
@@ -144,15 +143,18 @@ public:
       Serial.println("functionsControl onWrite - valor vazio recebido");
     }
   }
+
   void onRead(BLECharacteristic* variaveisBLE) override {
-    // Ao ler, escrevemos a representação atual do set_point.
-    // Podemos enviar em ASCII (ex: "25") para facilitar debug no lado do app
-    std::string out = std::to_string(set_point);
+    // Envia a temperatura atual do sensor correspondente
+    std::string out = std::to_string(temperatura[sensorIndex]);
     variaveisBLE->setValue(out);
-    Serial.print("functionsControl onRead - enviando setpoint: ");
+    Serial.print("functionsControl onRead - enviando temperatura sensor ");
+    Serial.print(sensorIndex);
+    Serial.print(": ");
     Serial.println(out.c_str());
   }
 };
+
 
 // ---------------------- Setup ----------------------
 
@@ -197,8 +199,10 @@ void setup() {
   for (int i = 0; i < 3; i++) {
     variaveisBLE[i]->setCallbacks(new enableControl(controleAtivo[i]));
   }
+  
   for (int i = 3; i < 6; i++) {
-    variaveisBLE[i]->setCallbacks(new functionsControl(setpoint[i - 3]));
+  // passamos o índice do sensor correspondente (0, 1 ou 2)
+  variaveisBLE[i]->setCallbacks(new functionsControl(setpoint[i - 3], i - 3));
   }
 
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
@@ -249,7 +253,8 @@ void loop() {
       Serial.print("Tempo após o index: ");
       Serial.println(millis());
       temperatura[i] = medida; 
-
+      Serial.print("Temperatura (ºC):");
+      Serial.println(medida);
       errk[i] = setpoint[i] - temperatura[i];
       DeltaSaida[i] = a0[i] * errk[i] + a1[i] * errk1[i] + a2[i] * errk2[i];
 
@@ -259,6 +264,10 @@ void loop() {
 
       output[i] = constrain(saida[i], 0, 255);
       ledcWrite(pwmChannel[i], (int)output[i]);
+      Serial.print("Saída em DC(0-255):");
+      Serial.print((int)output[i]);
+      Serial.print("sensor: ");
+      Serial.println(i);
 
       errk2[i] = errk1[i];
       errk1[i] = errk[i];
