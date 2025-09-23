@@ -228,6 +228,13 @@ void setup() {
 void loop() {
   unsigned long agora = millis();
 
+
+//  if ((agora - ultimoTempo[i] >= intervalo)){
+//    sensors[0].requestTemperatures(); 
+//    sensors[1].requestTemperatures(); 
+//    sensors[2].requestTemperatures(); 
+//  }
+
   for (int i = 0; i < 3; i++) {
     if (controleAtivo[i] && (agora - ultimoTempo[i] >= intervalo)) {
       ultimoTempo[i] = agora;
@@ -236,7 +243,7 @@ void loop() {
       sensors[i].requestTemperatures();
       Serial.print("Tempo após o request e antes do index: ");
       Serial.println(millis());
-      //if (sensors[i].isConversionComplete()) {
+      //while (!sensors[i].isConversionComplete()) {
         medida = sensors[i].getTempCByIndex(0);
       //}
       Serial.print("Tempo após o index: ");
