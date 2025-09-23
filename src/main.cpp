@@ -162,9 +162,11 @@ void setup() {
   BLEServer *servidorCIA = BLEDevice::createServer();
   servidorCIA->setCallbacks(new enableServer());
   for (int i = 0; i < 3; i++){
-    sensors[i].begin();
-    sensors[i].setResolution(12);
-  }
+  sensors[i].begin();
+  sensors[i].setResolution(12);
+  // sensors[i].setWaitForConversion(false); 
+  // ↑ Deixa o requestTemperatures() assíncrono (não bloqueia).
+}
   Serial.println("Servidor Criado");
   BLEService *controlTemp[2];
   for (int i = 0; i < 2; i++) {
@@ -234,7 +236,9 @@ void loop() {
       sensors[i].requestTemperatures();
       Serial.print("Tempo após o request e antes do index: ");
       Serial.println(millis());
-      medida = sensors[i].getTempCByIndex(0);
+      //if (sensors[i].isConversionComplete()) {
+        medida = sensors[i].getTempCByIndex(0);
+      //}
       Serial.print("Tempo após o index: ");
       Serial.println(millis());
       temperatura[i] = medida; 
