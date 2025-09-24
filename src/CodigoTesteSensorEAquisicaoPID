@@ -1,0 +1,85 @@
+#include <Arduino.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// Pino do sensor de temperatura
+const int SENSOR_PIN = 5;
+
+// PWM de aquecimento
+const int PWM_PIN = 2;
+const int pwmChannel = 0;
+const int pwmFreq = 1000;
+const int pwmResolution = 8;
+
+// Intervalo de leitura (ms)
+const unsigned long intervalo = 500;
+
+unsigned long ultimoTempo = 0;
+
+// Variáveis
+float temperatura = 0;
+
+// Flag para degrau iniciado
+bool iniciouDegrau = false;
+
+// Valor PWM para degrau (0-255)
+const int pwmDegrau = 200;
+
+// Instancia OneWire e DallasTemperature
+OneWire oneWire(SENSOR_PIN);
+DallasTemperature sensor(&oneWire);
+
+void setup() {
+  Serial.begin(115200);
+
+  // Inicializa sensor
+  sensor.begin();
+  sensor.setResolution(12);
+  sensor.setWaitForConversion(false); // requestTemperatures() assíncrono
+
+  // Inicializa PWM
+  ledcSetup(pwmChannel, pwmFreq, pwmResolution);
+  ledcAttachPin(PWM_PIN, pwmChannel);
+  ledcWrite(pwmChannel, 0); // PWM inicial 0
+
+  Serial.println("Pressione ENTER para iniciar o degrau de aquecimento...");
+}
+
+void loop() {
+  // Checa se ENTER foi pressionado para aplicar o degrau
+  if (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n' || c == '\r') {
+      iniciouDegrau = true;
+      ledcWrite(pwmChannel, pwmDegrau); // aplica degrau
+      Serial.println("Degrau iniciado!");
+    }
+  }
+
+  // Aquisição de temperatura a cada intervalo
+  if (millis() - ultimoTempo >= intervalo) {
+    Serial.print("Intervalo: ");
+    Serial.print((millis()-ultimoTempo));
+    Serial.print("Tempo de solicitação: ");
+    Serial.println(millis());
+    ultimoTempo = millis();
+
+    // Inicia conversão assíncrona
+    sensor.requestTemperatures();
+    while (!sensor.isConversionComplete()) {
+      // pode fazer outras tarefas aqui
+    }
+
+    // Lê temperatura
+    temperatura = sensor.getTempCByIndex(0);
+
+    // Imprime PWM atual, temperatura e tempo
+    int pwmAtual = iniciouDegrau ? pwmDegrau : 0;
+    Serial.print("PWM: ");
+    Serial.print(pwmAtual);
+    Serial.print(" | Temperatura (°C): ");
+    Serial.print(temperatura);
+    Serial.print(" | Tempo (ms): ");
+    Serial.println(millis());
+  }
+}
