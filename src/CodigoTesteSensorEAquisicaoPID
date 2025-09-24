@@ -3,10 +3,10 @@
 #include <DallasTemperature.h>
 
 // Pino do sensor de temperatura
-const int SENSOR_PIN = 5;
+const int SENSOR_PIN = 27;
 
 // PWM de aquecimento
-const int PWM_PIN = 2;
+const int PWM_PIN = 18;
 const int pwmChannel = 0;
 const int pwmFreq = 1000;
 const int pwmResolution = 8;
