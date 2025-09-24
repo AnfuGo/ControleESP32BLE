@@ -21,7 +21,7 @@ const char* AlTemp_3          = "e49b8658-6f76-43dd-a36e-db7f4b1aa546";
 const char* SERVICE_UUID[2] = { CIA_CONTROL_ENABLE, CONTROLE_TEMP };
 const char* CHARACTERISTIC_UUID[6] = { ENABLE_1, ENABLE_2, ENABLE_3, AlTemp_1, AlTemp_2, AlTemp_3 };
 
-const int Sensor_PINS[3] = { 27, 26, 25 };  // definir pinos para os sensores
+const int Sensor_PINS[3] = { 27, 26, 25 };  
 const int PWM_PINS[3]    = { 18,  19,  21 };  // potência de saída para resistências, definir pinos GPIO
 
 const int pwmChannel[3]  = { 0, 1, 2 };

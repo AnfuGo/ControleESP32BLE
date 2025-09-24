@@ -67,7 +67,7 @@ void loop() {
     // Inicia conversão assíncrona
     sensor.requestTemperatures();
     while (!sensor.isConversionComplete()) {
-      // pode fazer outras tarefas aqui
+
     }
 
     // Lê temperatura
