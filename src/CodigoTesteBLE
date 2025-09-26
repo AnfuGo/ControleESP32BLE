@@ -20,6 +20,7 @@ const char* CHARACTERISTIC_UUID[6] = { ENABLE_1, ENABLE_2, ENABLE_3, AlTemp_1, A
 // Variáveis de controle (simulação)
 bool controleAtivo[3] = { false, false, false };
 int setpoint[3]       = { 25, 25, 25 };
+float temperatura[3] = { 25, 25, 25 };
 
 // ---------------------- Helpers ----------------------
 static void printBytes(const std::string &value, const char* tag = nullptr) {
@@ -67,30 +68,49 @@ public:
 
 class functionsControl : public BLECharacteristicCallbacks {
   int &set_point;
+  int sensorIndex; // índice do sensor correspondente
 public:
-  functionsControl(int &st) : set_point(st) {}
+  functionsControl(int &st, int idx) : set_point(st), sensorIndex(idx) {}
+
   void onWrite(BLECharacteristic* variaveisBLE) override {
     const std::string value = variaveisBLE->getValue();
 
     if (!value.empty()) {
-      // Print completo em bytes (hex + decimal)
-      printBytes(value, "[BLE] functionsControl recebido:");
+      bool allAsciiDigits = true;
+      for (char c : value) {
+        if (!(std::isdigit((unsigned char)c) || c == '-' || c == '+')) {
+          allAsciiDigits = false;
+          break;
+        }
+      }
 
-      // Interpreta o primeiro byte como valor numérico (não ASCII)
-      uint8_t b0 = static_cast<uint8_t>(value[0]);
-      set_point = (int)b0;
+      if (allAsciiDigits) {
+        int parsed = atoi(value.c_str());
+        set_point = parsed;
+        Serial.print("functionsControl onWrite - ASCII parsed: ");
+        Serial.println(parsed);
+      } else {
+        uint8_t b = static_cast<uint8_t>(value[0]);
+        set_point = b;
+        Serial.print("functionsControl onWrite - byte value: ");
+        Serial.println(b);
+      }
 
-      Serial.printf("[BLE] functionsControl - primeiro byte interpretado como valor: 0x%02X (%u) -> setpoint=%d\n",
-                    b0, b0, set_point);
+      Serial.print("Novo setpoint: ");
+      Serial.println(set_point);
     } else {
-      Serial.println("[BLE] functionsControl onWrite - valor vazio recebido");
+      Serial.println("functionsControl onWrite - valor vazio recebido");
     }
   }
+
   void onRead(BLECharacteristic* variaveisBLE) override {
-    // Envia leitura em ASCII para leitura fácil via apps (mantive isso)
-    std::string out = std::to_string(set_point);
+    // Envia a temperatura atual do sensor correspondente
+    std::string out = std::to_string(temperatura[sensorIndex]);
     variaveisBLE->setValue(out);
-    Serial.printf("[BLE] functionsControl leitura (ASCII): %s\n", out.c_str());
+    Serial.print("functionsControl onRead - enviando temperatura sensor ");
+    Serial.print(sensorIndex);
+    Serial.print(": ");
+    Serial.println(out.c_str());
   }
 };
 
@@ -140,7 +160,7 @@ void setup() {
     variaveisBLE[i]->setCallbacks(new enableControl(controleAtivo[i]));
   }
   for (int i = 3; i < 6; i++) {
-    variaveisBLE[i]->setCallbacks(new functionsControl(setpoint[i - 3]));
+    variaveisBLE[i]->setCallbacks(new functionsControl(setpoint[i - 3], i - 3));
   }
 
   // Iniciar serviços
@@ -164,8 +184,30 @@ const unsigned long setpointPrintInterval = 5000UL; // 5 segundos
 unsigned long lastHeartbeatPrint = 0;
 const unsigned long heartbeatInterval = 2000UL; // 2 segundos (opcional)
 
+unsigned long lastTempUpdate = 0;
+const unsigned long tempUpdateInterval = 1000UL; // 1 segundo
+
 void loop() {
   unsigned long now = millis();
+
+  // === Atualiza temperaturas simuladas ===
+  if (now - lastTempUpdate >= tempUpdateInterval) {
+    lastTempUpdate = now;
+
+    for (int i = 0; i < 3; i++) {
+      // diferença entre setpoint e temperatura
+      float erro = setpoint[i] - temperatura[i];
+
+      // Simula resposta lenta: aproximação suave
+      temperatura[i] += erro * 0.1; // ajuste lento
+
+      // Adiciona uma pequena oscilação aleatória (-0.5 a +0.5)
+      temperatura[i] += ((rand() % 100) / 100.0f - 0.5f);
+
+      Serial.printf("[TEMP] Zona %d -> %.2f °C (setpoint %d)\n",
+                    i + 1, temperatura[i], setpoint[i]);
+    }
+  }
 
   // Print dos setpoints a cada 5 segundos
   if (now - lastSetpointPrint >= setpointPrintInterval) {
@@ -180,6 +222,6 @@ void loop() {
     Serial.println("[LOG] Loop rodando - aguardando eventos BLE...");
   }
 
-  // pequena pausa para evitar uso 100% CPU e dar tempo para outras tasks do sistema
   delay(10);
 }
+
