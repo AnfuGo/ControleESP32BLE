@@ -212,12 +212,14 @@ temperatura[i] += delta;
     lastSetpointPrint = now;
     Serial.printf("[SETPOINTS] Atuais -> zona1: %d | zona2: %d | zona3: %d\n",
                   setpoint[0], setpoint[1], setpoint[2]);
+    Serial.printf("[CONTROLE] Atuais -> zona1: %d | zona2: %d | zona3: %d\n",
+                  controleAtivo[0], controleAtivo[1], controleAtivo[2]);
   }
 
   // Log heartbeat (opcional)
   if (now - lastHeartbeatPrint >= heartbeatInterval) {
     lastHeartbeatPrint = now;
-    Serial.println("[LOG] Loop rodando - aguardando eventos BLE...");
+    //Serial.println("[LOG] Loop rodando - aguardando eventos BLE...");
   }
 
   delay(10);

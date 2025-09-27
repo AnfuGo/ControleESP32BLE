@@ -231,6 +231,8 @@ void setup() {
 
 void loop() {
   unsigned long agora = millis();
+  unsigned long agora2 = millis();
+  unsigned long ultimoTempo2 = 0;
 
 
 //  if ((agora - ultimoTempo[i] >= intervalo)){
@@ -238,6 +240,15 @@ void loop() {
 //    sensors[1].requestTemperatures(); 
 //    sensors[2].requestTemperatures(); 
 //  }
+    if (agora2 - ultimoTempo2 >= 1500){
+      ultimoTempo2 = agora2;
+    Serial.printf("[SETPOINTS] Atuais -> zona1: %d | zona2: %d | zona3: %d\n",
+                  setpoint[0], setpoint[1], setpoint[2]);
+    Serial.printf("[CONTROLE] Atuais -> zona1: %d | zona2: %d | zona3: %d\n",
+                  controleAtivo[0], controleAtivo[1], controleAtivo[2]);
+                }
+    
+  
 
   for (int i = 0; i < 3; i++) {
     if (controleAtivo[i] && (agora - ultimoTempo[i] >= intervalo)) {
