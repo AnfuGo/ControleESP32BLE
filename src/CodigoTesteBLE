@@ -195,17 +195,15 @@ void loop() {
     lastTempUpdate = now;
 
     for (int i = 0; i < 3; i++) {
-      // diferença entre setpoint e temperatura
-      float erro = setpoint[i] - temperatura[i];
+ 
+// Gera número aleatório de 0 a 0.99 com passo de 0.01
+float delta = int(random(0, 100)) / 100.0f;  // 0.00, 0.01, ..., 0.99
 
-      // Simula resposta lenta: aproximação suave
-      temperatura[i] += erro * 0.1; // ajuste lento
+// Soma à temperatura e garante apenas 2 casas decimais
+temperatura[i] += delta;
 
-      // Adiciona uma pequena oscilação aleatória (-0.5 a +0.5)
-      temperatura[i] += ((rand() % 100) / 100.0f - 0.5f);
-
-      Serial.printf("[TEMP] Zona %d -> %.2f °C (setpoint %d)\n",
-                    i + 1, temperatura[i], setpoint[i]);
+      Serial.printf("[TEMP] Zona %d -> %.9f °C (setpoint %d)   delta: %.9f\n",
+                    i + 1, temperatura[i], setpoint[i], delta);
     }
   }
 
@@ -224,4 +222,3 @@ void loop() {
 
   delay(10);
 }
-
