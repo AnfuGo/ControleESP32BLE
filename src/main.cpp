@@ -34,9 +34,9 @@ unsigned long ultimoTempo[3] = { 0, 0, 0 };
 const unsigned long intervalo = 500; // intervalo de aquisição
 
 // Parâmetros FOPDT do sistema
-float K[3]     = { 1, 1, 1 };
-float tau[3]   = { 3, 3, 3 };
-float theta[3] = { 4, 4, 4 };
+float K[3]     = { 1.453, 1.599, 1.967 };
+float tau[3]   = { 286.2705, 268.2375, 370.4385 };
+float theta[3] = { 25.8135, 22.1845, 13.7885 };
 float medida;
 
 int setpoint[3]      = { 25, 25, 25 };
@@ -47,6 +47,7 @@ float Kp[3], Ti[3], Td[3];
 float DeltaSaida[3];
 float saidaAnterior[3];
 float saida[3];     // porcentagem
+float bias[3] = { 2, 2, 2 };
 int output[3];      // saída em 0-255
 float errk2[3] = { 0, 0, 0 };
 float errk1[3] = { 0, 0, 0 };
@@ -258,8 +259,8 @@ void loop() {
       errk[i] = setpoint[i] - temperatura[i];
       DeltaSaida[i] = a0[i] * errk[i] + a1[i] * errk1[i] + a2[i] * errk2[i];
 
-      saida[i] = DeltaSaida[i] + saidaAnterior[i]; // porcentagem do DC
-      saidaAnterior[i] = saida[i];
+      saida[i] = bias[i] + DeltaSaida[i] + saidaAnterior[i]; // porcentagem do DC
+      saidaAnterior[i] = saida[i] - bias[i];
       saida[i] = saida[i] * 255 / 100;
 
       output[i] = constrain(saida[i], 0, 255);

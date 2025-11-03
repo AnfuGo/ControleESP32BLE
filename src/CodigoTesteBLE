@@ -2,24 +2,28 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
-#include <BLEClient.h>
 
-// UUIDs  
+// UUIDs
 const char* CIA_CONTROL_ENABLE = "22086d8b-57c2-4eb4-b82d-4b7936413e78";
-const char* CONTROLE_TEMP     = "2f7d55d9-acce-4a1d-9871-dd3e4ec73eec";
-const char* ENABLE_1          = "1b4a81b4-abf5-450d-9d4d-81b4e951baa7";
-const char* ENABLE_2          = "d2b757c1-9fb1-4166-af83-467a0a0a55f3";
-const char* ENABLE_3          = "765170c6-24e5-4890-a346-10195b57ca7c";
-const char* AlTemp_1          = "28b66ce2-882e-46e2-bc17-1332f33072db";
-const char* AlTemp_2          = "83ec522b-14b0-4b42-8a8b-0924993f5490";
-const char* AlTemp_3          = "e49b8658-6f76-43dd-a36e-db7f4b1aa546";
+const char* CONTROLE_TEMP      = "2f7d55d9-acce-4a1d-9871-dd3e4ec73eec";
+const char* ENABLE_1           = "1b4a81b4-abf5-450d-9d4d-81b4e951baa7";
+const char* ENABLE_2           = "d2b757c1-9fb1-4166-af83-467a0a0a55f3";
+const char* ENABLE_3           = "765170c6-24e5-4890-a346-10195b57ca7c";
+const char* AlTemp_1           = "28b66ce2-882e-46e2-bc17-1332f33072db";
+const char* AlTemp_2           = "83ec522b-14b0-4b42-8a8b-0924993f5490";
+const char* AlTemp_3           = "e49b8658-6f76-43dd-a36e-db7f4b1aa546";
 
-const char* SERVICE_UUID[2] = { CIA_CONTROL_ENABLE, CONTROLE_TEMP };
+const char* SERVICE_UUID[2]        = { CIA_CONTROL_ENABLE, CONTROLE_TEMP };
 const char* CHARACTERISTIC_UUID[6] = { ENABLE_1, ENABLE_2, ENABLE_3, AlTemp_1, AlTemp_2, AlTemp_3 };
 
-// Variáveis de controle (simulação)
+// variáveis simuladas
 bool controleAtivo[3] = { false, false, false };
 int setpoint[3]       = { 25, 25, 25 };
+float temperatura[3]  = { 22.0, 23.0, 24.0 };
+
+// controle da simulação
+unsigned long ultimoUpdate = 0;
+bool sobe[3] = { true, true, true };
 
 // ---------------------- Helpers ----------------------
 static void printBytes(const std::string &value, const char* tag = nullptr) {
@@ -50,12 +54,11 @@ public:
     const std::string value = ENABLE_CONTROL->getValue();
 
     if (!value.empty()) {
-      // Print completo em bytes (hex + decimal)
       printBytes(value, "[BLE] enableControl recebido:");
 
-      // Interpreta o primeiro byte como valor numérico (0 = off, !=0 = on)
       uint8_t b0 = static_cast<uint8_t>(value[0]);
-      controle = (b0 != 0);
+      if ((b0 == '0') || (b0 == '1')) controle = (b0 == '1');
+      else controle = (b0 != 0);
 
       Serial.printf("[BLE] enableControl - primeiro byte: 0x%02X (%u) -> controleAtivo=%s\n",
                     b0, b0, controle ? "ON" : "OFF");
@@ -67,30 +70,41 @@ public:
 
 class functionsControl : public BLECharacteristicCallbacks {
   int &set_point;
+  int sensorIndex;
 public:
-  functionsControl(int &st) : set_point(st) {}
+  functionsControl(int &st, int idx) : set_point(st), sensorIndex(idx) {}
+
   void onWrite(BLECharacteristic* variaveisBLE) override {
     const std::string value = variaveisBLE->getValue();
-
     if (!value.empty()) {
-      // Print completo em bytes (hex + decimal)
       printBytes(value, "[BLE] functionsControl recebido:");
 
-      // Interpreta o primeiro byte como valor numérico (não ASCII)
-      uint8_t b0 = static_cast<uint8_t>(value[0]);
-      set_point = (int)b0;
+      bool allAsciiDigits = true;
+      for (char c : value) {
+        if (!(isdigit((unsigned char)c) || c == '-' || c == '+')) { allAsciiDigits = false; break; }
+      }
 
-      Serial.printf("[BLE] functionsControl - primeiro byte interpretado como valor: 0x%02X (%u) -> setpoint=%d\n",
-                    b0, b0, set_point);
+      if (allAsciiDigits) {
+        int parsed = atoi(value.c_str());
+        set_point = parsed;
+        Serial.printf("[BLE] functionsControl - ASCII parsed: %d\n", parsed);
+      } else {
+        uint8_t b = static_cast<uint8_t>(value[0]);
+        set_point = b;
+        Serial.printf("[BLE] functionsControl - byte value: %u\n", b);
+      }
+
+      Serial.printf("[BLE] Novo setpoint[%d]: %d\n", sensorIndex, set_point);
     } else {
       Serial.println("[BLE] functionsControl onWrite - valor vazio recebido");
     }
   }
+
   void onRead(BLECharacteristic* variaveisBLE) override {
-    // Envia leitura em ASCII para leitura fácil via apps (mantive isso)
-    std::string out = std::to_string(set_point);
+    std::string out = std::to_string(temperatura[sensorIndex]);
     variaveisBLE->setValue(out);
-    Serial.printf("[BLE] functionsControl leitura (ASCII): %s\n", out.c_str());
+    Serial.printf("[BLE] functionsControl onRead - enviando temperatura sensor %d: %s\n",
+                  sensorIndex, out.c_str());
   }
 };
 
@@ -99,25 +113,16 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\n=== Iniciando ESP32S_CIA - Teste BLE ===");
 
-  // Inicializa BLE uma vez
   BLEDevice::init("ESP32S_CIA");
-
-  // === Print do endereço MAC ===
-  BLEAddress mac = BLEDevice::getAddress();
-  Serial.print("[INFO] Endereço MAC do ESP32: ");
-  Serial.println(mac.toString().c_str());
-
   BLEServer *servidorCIA = BLEDevice::createServer();
   servidorCIA->setCallbacks(new enableServer());
 
-  // Criação de serviços
   BLEService *controlTemp[2];
   for (int i = 0; i < 2; i++) {
     controlTemp[i] = servidorCIA->createService(SERVICE_UUID[i]);
     Serial.printf("[BLE] Serviço criado UUID: %s\n", SERVICE_UUID[i]);
   }
 
-  // Criação de características
   BLECharacteristic *variaveisBLE[6];
   int k = 0, l = 0;
   for (int i = 0; i < 2; i++) {
@@ -130,56 +135,35 @@ void setup() {
         BLECharacteristic::PROPERTY_INDICATE
       );
       Serial.printf("[BLE] Característica criada UUID: %s\n", CHARACTERISTIC_UUID[l]);
-      k++;
-      l++;
+      k++; l++;
     }
   }
 
-  // Ativar callbacks
-  for (int i = 0; i < 3; i++) {
-    variaveisBLE[i]->setCallbacks(new enableControl(controleAtivo[i]));
-  }
-  for (int i = 3; i < 6; i++) {
-    variaveisBLE[i]->setCallbacks(new functionsControl(setpoint[i - 3]));
-  }
+  for (int i = 0; i < 2; i++) controlTemp[i]->start();
 
-  // Iniciar serviços
-  for (int i = 0; i < 2; i++) {
-    controlTemp[i]->start();
-    Serial.printf("[BLE] Serviço iniciado: %s\n", SERVICE_UUID[i]);
-  }
+  for (int i = 0; i < 3; i++) variaveisBLE[i]->setCallbacks(new enableControl(controleAtivo[i]));
+  for (int i = 3; i < 6; i++) variaveisBLE[i]->setCallbacks(new functionsControl(setpoint[i - 3], i - 3));
 
-  // Iniciar advertising (padrão)
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->setScanResponse(true); // ajuda descoberta
+  pAdvertising->setScanResponse(true);
   pAdvertising->start();
   Serial.println("[BLE] Advertising iniciado. Aguardando conexão...");
 }
 
 // ---------------------- Loop ----------------------
-// prints periódicos sem bloqueio
-unsigned long lastSetpointPrint = 0;
-const unsigned long setpointPrintInterval = 5000UL; // 5 segundos
-
-unsigned long lastHeartbeatPrint = 0;
-const unsigned long heartbeatInterval = 2000UL; // 2 segundos (opcional)
-
 void loop() {
-  unsigned long now = millis();
-
-  // Print dos setpoints a cada 5 segundos
-  if (now - lastSetpointPrint >= setpointPrintInterval) {
-    lastSetpointPrint = now;
-    Serial.printf("[SETPOINTS] Atuais -> zona1: %d | zona2: %d | zona3: %d\n",
-                  setpoint[0], setpoint[1], setpoint[2]);
+  unsigned long agora = millis();
+  if (agora - ultimoUpdate >= 1000) { // cada 1s
+    ultimoUpdate = agora;
+    for (int i = 0; i < 3; i++) {
+      if (sobe[i]) {
+        temperatura[i] += 0.5;
+        if (temperatura[i] >= 30.0) sobe[i] = false;
+      } else {
+        temperatura[i] -= 0.5;
+        if (temperatura[i] <= 20.0) sobe[i] = true;
+      }
+      Serial.printf("[SIM] Temperatura[%d]=%.1f\n", i, temperatura[i]);
+    }
   }
-
-  // Log heartbeat (opcional)
-  if (now - lastHeartbeatPrint >= heartbeatInterval) {
-    lastHeartbeatPrint = now;
-    Serial.println("[LOG] Loop rodando - aguardando eventos BLE...");
-  }
-
-  // pequena pausa para evitar uso 100% CPU e dar tempo para outras tasks do sistema
-  delay(10);
 }
