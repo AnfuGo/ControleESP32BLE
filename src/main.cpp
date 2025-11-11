@@ -265,7 +265,11 @@ void setup() {
 
 void loop() {
   unsigned long agora = millis();
-
+//  if ((agora - ultimoTempo[i] >= intervalo)){
+//    sensors[0].requestTemperatures(); 
+//    sensors[1].requestTemperatures(); 
+//    sensors[2].requestTemperatures(); 
+//  }
   for (int i = 0; i < 3; i++) {
     if (controleAtivo[i] && (agora - ultimoTempo[i] >= intervalo)) {
       ultimoTempo[i] = agora;
