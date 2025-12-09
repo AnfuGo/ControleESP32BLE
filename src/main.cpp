@@ -21,7 +21,7 @@ const char* AlTemp_3           = "e49b8658-6f76-43dd-a36e-db7f4b1aa546";
 #define PID_INCREMENTAL 0
 #define PID_IDEAL       1
 #define PID_MODE PID_IDEAL
-#define lamda 0
+#define lamda 1
 
 const char* SERVICE_UUID[2] = { CIA_CONTROL_ENABLE, CONTROLE_TEMP };
 const char* CHARACTERISTIC_UUID[6] = { ENABLE_1, ENABLE_2, ENABLE_3, AlTemp_1, AlTemp_2, AlTemp_3 };
@@ -40,7 +40,7 @@ const int rampSteps = 5;
 float setpointQueue[100];   // fila com até 100 steps futuros
 int queueHead = 0, queueTail = 0;
 unsigned long lastRampUpdate[3] = { 0, 0, 0 };
-const unsigned long rampInterval = 1000;  // tempo (ms) entre steps da rampa
+const int rampInterval = 5000;  // tempo (ms) entre steps da rampa
 unsigned long ultimoTempo[3] = { 0, 0, 0 }; 
 const unsigned long intervalo = 500; // intervalo de aquisição
 
@@ -71,7 +71,7 @@ float erroAnterior[3] = { 0, 0, 0};
 float temperatura[3] = { 25, 25, 25 };
 float a0[3], a1[3], a2[3];
 const float Ts[3] = { 0.5, 0.5, 0.5 };
-
+int count = 0;
 // Cria uma instância do barramento OneWire
 OneWire oneWire0(Sensor_PINS[0]);
 OneWire oneWire1(Sensor_PINS[1]);
@@ -82,6 +82,60 @@ DallasTemperature sensors[3] = {
   DallasTemperature(&oneWire1),
   DallasTemperature(&oneWire2)
 };
+
+
+// ---------------------- Funções auxiliares ----------------------
+
+void pushSetpoint(float sp) {
+  setpointQueue[queueTail] = sp;
+  queueTail = (queueTail + 1) % 50;
+}
+
+bool popSetpoint(float *sp) {
+  if (queueHead == queueTail) return false;
+  *sp = setpointQueue[queueHead];
+  queueHead = (queueHead + 1) % 50;
+  return true;
+}
+
+void addRamp(float spOld, float spNew) {
+  float step = (spNew - spOld) / rampSteps;
+  for (int i = 1; i <= rampSteps; i++) {
+    pushSetpoint(spOld + i * step);
+  }
+}
+
+void setSetpoint(int canal, float novo) {
+  float antigo = setpoint[canal];
+  addRamp(antigo, novo);
+}
+
+
+float PID_Ideal(int i) {
+  float erro = errk[i];
+  integral[i] += erro * Ts[i] / Ti[i];
+  //anti-windup
+  if (integral[i] >= 100)
+  {
+    integral[i] = 60; // 60% potencial já supre a temperatura de operação
+  }
+  float deriv = (erro - erroAnterior[i]) * Td[i] / Ts[i];
+  float u = bias[i] + Kp[i] * (erro + integral[i] + deriv);
+  erroAnterior[i] = erro;
+  return u;
+}
+
+float PID_Incremental(int i) {
+  return a0[i]*errk[i] + a1[i]*errk1[i] + a2[i]*errk2[i];
+}
+
+void tuneLambda(int i, float KpProc, float tauProc, float thetaProc) {
+  float lambda = 0.1f * tauProc;
+  Kp[i] = tauProc / (KpProc * (lambda + thetaProc));
+  Ti[i] = 0.5 * tauProc;
+  Td[i] = 0;
+}
+
 
 // ---------------------- Classes BLE ----------------------
 
@@ -156,7 +210,7 @@ public:
         }
       }
 
-      if (allAsciiDigits) {
+      if (0) {
         int parsed = atoi(value.c_str());
         set_point = parsed;
         Serial.print("functionsControl onWrite - ASCII parsed: ");
@@ -270,6 +324,7 @@ void loop() {
 //    sensors[1].requestTemperatures(); 
 //    sensors[2].requestTemperatures(); 
 //  }
+  if (count <= 10){
   for (int i = 0; i < 3; i++) {
     if (controleAtivo[i] && (agora - ultimoTempo[i] >= intervalo)) {
       ultimoTempo[i] = agora;
@@ -281,7 +336,7 @@ void loop() {
       medida = sensors[i].getTempCByIndex(0);
       Serial.print("Tempo após o index: ");
       Serial.println(millis());
-      temperatura[i] = medida; 
+      temperatura[i] = medida;
       Serial.print("Temperatura (ºC):");
       Serial.println(medida);
 
@@ -289,10 +344,15 @@ void loop() {
         float newSp;
         if (popSetpoint(&newSp)) {
           setpoint[i] = newSp;
+          Serial.print("SETPOINT ATT: ");
+          Serial.println(setpoint[i]);
           lastRampUpdate[i] = millis();
         }
       }
-
+      if (temperatura[i] == -127 || temperatura[i] == 85){
+        temperatura[i] = setpoint[i]; // evita saida do proporcional e acumulo do integral...]
+        count++;
+      } 
       errk[i] = setpoint[i] - temperatura[i];
       
       if (PID_MODE == PID_INCREMENTAL) {
@@ -313,8 +373,9 @@ void loop() {
       Serial.print("Saída em DC(0-255):");
       Serial.print((int)output[i]);
       Serial.print(" || sensor: ");
-      Serial.println(i);
-
+      Serial.print(i);
+      Serial.print(" || setpoint: ");
+      Serial.println(setpoint[i]);
       errk2[i] = errk1[i];
       errk1[i] = errk[i];
     } 
@@ -324,49 +385,7 @@ void loop() {
     }
   }
 }
-
-// ---------------------- Funções auxiliares ----------------------
-
-void pushSetpoint(float sp) {
-  setpointQueue[queueTail] = sp;
-  queueTail = (queueTail + 1) % 50;
 }
 
-bool popSetpoint(float *sp) {
-  if (queueHead == queueTail) return false;
-  *sp = setpointQueue[queueHead];
-  queueHead = (queueHead + 1) % 50;
-  return true;
-}
 
-void addRamp(float spOld, float spNew) {
-  float step = (spNew - spOld) / rampSteps;
-  for (int i = 1; i <= rampSteps; i++) {
-    pushSetpoint(spOld + i * step);
-  }
-}
 
-void setSetpoint(int canal, float novo) {
-  float antigo = setpoint[canal];
-  addRamp(antigo, novo);
-}
-
-float PID_Ideal(int i) {
-  float erro = errk[i];
-  integral[i] += erro * Ts[i] / Ti[i];
-  float deriv = (erro - erroAnterior[i]) * Td[i] / Ts[i];
-  float u = bias[i] + Kp[i] * (erro + integral[i] + deriv);
-  erroAnterior[i] = erro;
-  return u;
-}
-
-float PID_Incremental(int i) {
-  return a0[i]*errk[i] + a1[i]*errk1[i] + a2[i]*errk2[i];
-}
-
-void tuneLambda(int i, float KpProc, float tauProc, float thetaProc) {
-  float lambda = 0.5f * tauProc;
-  Kp[i] = tauProc / (KpProc * (lambda + thetaProc));
-  Ti[i] = 0.25 * tauProc;
-  Td[i] = 0;
-}
