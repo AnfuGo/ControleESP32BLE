@@ -324,7 +324,7 @@ void loop() {
 //    sensors[1].requestTemperatures(); 
 //    sensors[2].requestTemperatures(); 
 //  }
-  if (count <= 10){
+  if (count <= 1000){
   for (int i = 0; i < 3; i++) {
     if (controleAtivo[i] && (agora - ultimoTempo[i] >= intervalo)) {
       ultimoTempo[i] = agora;
@@ -384,6 +384,10 @@ void loop() {
       saidaAnterior[i] = 0;
     }
   }
+} else {
+  ledcWrite(pwmChannel[0], 0);
+  ledcWrite(pwmChannel[1], 0);
+  ledcWrite(pwmChannel[2], 0);
 }
 }
 
